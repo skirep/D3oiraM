@@ -1,6 +1,6 @@
 # D3oiraM ✦
 
-An original 3D platform adventure built with **Three.js**. Play as **Niu**, a little sky-garden keeper, and reconnect three floating worlds by recovering their crystals.
+An original 3D platform adventure built with **Three.js**. Play as **Niu**, an original wind-and-leaf creature with leaf ears, a leafy tail and expressive eyes, and reconnect three floating worlds by recovering their crystals.
 
 ## Play
 
@@ -67,3 +67,14 @@ Automated physics and build checks pass. Visual/browser gameplay QA remains pend
 ## License
 
 Original source and procedural artwork: MIT. Three.js and Vite retain their respective MIT licenses. Optional fonts: DM Sans and Outfit, distributed by Google Fonts under the SIL Open Font License.
+
+## Creature designs
+
+The character art uses original pocket-monster-inspired silhouettes and toon shading:
+
+- **Niu:** mint wind-and-leaf explorer, cream muzzle, leaf ears and animated leaf-fan tail.
+- **Brotort:** green seed-shell garden guardian with a sprouting flower.
+- **Brasec:** orange sunstone guardian with a mineral back and crystal tail.
+- **Llunalat:** lavender moonwing guardian with animated wings and a golden forehead gem.
+
+All have eye highlights, blinking and secondary animation. The three guardian species retain the same stomp/contact rules and collision bounds.

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import './style.css';
+import { createExplorer, createGuardian, animateCreature } from './creatures.js';
 import { LEVELS, coinPositions } from './levels.js';
 import { createPlayer, stepPlayer, jump, platformAt, inside, clamp } from './physics.js';
 import { TEXT } from './i18n.js';
@@ -131,35 +132,11 @@ function makeIsland(b, i, level, rng) {
   return group;
 }
 function makePlayer() {
-  const g = new THREE.Group(); world.add(g);
-  const body = orb('#4a9b96', [.42, .49, .32], [0, .71, 0], g);
-  const head = orb('#8bcac0', [.49, .43, .4], [0, 1.25, 0], g);
-  orb('#b6ded0', [.22, .25, .12], [0, .79, .28], g);
-  for (const s of [-1, 1]) {
-    orb('#80beb1', [.14, .26, .16], [s * .28, 1.63, -.03], g);
-    orb('#ebf3d7', [.145, .18, .065], [s * .19, 1.3, .36], g);
-    orb('#183c37', [.067, .1, .042], [s * .19, 1.29, .414], g);
-    const foot = orb('#234d4c', [.18, .13, .27], [s * .23, .14, .06], g);
-    const arm = orb('#79bdb0', [.13, .32, .13], [s * .48, .75, .02], g);
-    g.userData[s < 0 ? 'leftFoot' : 'rightFoot'] = foot;
-    g.userData[s < 0 ? 'leftArm' : 'rightArm'] = arm;
-  }
-  const scarf = mesh(GEO.cylinder, '#ec8a61', [.34, .14, .34], [0, 1, 0], g);
-  box('#ec8a61', [.18, .48, .07], [-.22, .78, -.36], g).rotation.z = -.28;
-  const backpack = box('#d8ae65', [.48, .5, .21], [0, .73, -.32], g); backpack.rotation.x = -.1;
-  g.userData.body = body; g.userData.head = head; g.userData.scarf = scarf;
-  return g;
+  const g = createExplorer(); world.add(g); return g;
 }
-function makeGuardian(config, level) {
+function makeGuardian(config) {
   const island = platforms[config.island];
-  const g = new THREE.Group(); world.add(g);
-  mesh(GEO.lowSphere, levelIndex === 2 ? '#b995ce' : '#d28a68', [.57, .49, .57], [0, .5, 0], g);
-  for (const s of [-1, 1]) {
-    orb('#fff2ce', [.12, .15, .09], [s * .2, .59, .5], g);
-    orb('#443f47', [.055, .08, .04], [s * .2, .59, .58], g);
-    box('#68605a', [.25, .12, .35], [s * .28, .12, .05], g);
-  }
-  const crown = mesh(GEO.cone, level.accent, [.32, .25, .32], [0, 1, 0], g);
+  const g = createGuardian(levelIndex); world.add(g);
   g.position.set(island.x, island.y, island.z);
   return { ...config, mesh: g, alive: true, phase: config.island * 1.2 };
 }
@@ -448,6 +425,8 @@ function animateScene(dt) {
   checkpointMesh.rotation.z = time;
   playerMesh.position.set(p.x, p.y, p.z);
   const speed = Math.hypot(p.vx, p.vz);
+  animateCreature(playerMesh, time, speed, !p.grounded);
+  enemies.forEach(e => { if (e.alive) animateCreature(e.mesh, time + e.phase, 1); });
   if (speed > .3) {
     const desired = Math.atan2(p.vx, p.vz), current = playerMesh.rotation.y;
     const diff = Math.atan2(Math.sin(desired - current), Math.cos(desired - current));
