@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import './style.css';
+import { surfaceMaterial, organicSphere, cragGeometry, loadNaturalTextures, atmosphere } from './realism.js';
 import { createExplorer, createGuardian, animateCreature } from './creatures.js';
 import { LEVELS, coinPositions } from './levels.js';
 import { createPlayer, stepPlayer, jump, platformAt, inside, clamp } from './physics.js';
@@ -45,12 +46,13 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.28;
+renderer.toneMappingExposure = .95;
+loadNaturalTextures();
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, .1, 220);
 const ambient = new THREE.HemisphereLight(0xfff8e1, 0x5c7e87, 2.4); scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffe5b2, 3.4); sun.position.set(-20, 35, 15); sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024); sun.shadow.camera.left = -24; sun.shadow.camera.right = 24;
+sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 1024 : 2048); sun.shadow.camera.left = -24; sun.shadow.camera.right = 24;
 sun.shadow.camera.top = 24; sun.shadow.camera.bottom = -24; sun.shadow.camera.near = .5; sun.shadow.camera.far = 90;
 sun.shadow.normalBias = .04; scene.add(sun, sun.target);
 const materials = new Map();
@@ -60,9 +62,10 @@ function mat(color, extra = {}) {
   return materials.get(key);
 }
 const GEO = {
-  sphere: new THREE.SphereGeometry(1, 16, 12),
-  lowSphere: new THREE.IcosahedronGeometry(1, 1),
+  sphere: new THREE.SphereGeometry(1, 24, 16),
+  lowSphere: organicSphere(),
   box: new THREE.BoxGeometry(1, 1, 1),
+  crag: cragGeometry(),
   cone: new THREE.ConeGeometry(1, 1, 6),
   cylinder: new THREE.CylinderGeometry(1, 1, 1, 12),
   coin: new THREE.CylinderGeometry(.28, .28, .1, 16),
@@ -80,9 +83,15 @@ function box(color, scale, position, parent) { return mesh(GEO.box, color, scale
 function random(seed) { let s = seed >>> 0; return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
 function tree(x, y, z, size, color, parent) {
   const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g);
-  mesh(GEO.cylinder, '#a47d59', [.18 * size, 1.5 * size, .18 * size], [0, .75 * size, 0], g);
-  mesh(GEO.lowSphere, color, [1.05 * size, 1.3 * size, 1.05 * size], [0, 2 * size, 0], g);
-  mesh(GEO.lowSphere, color, [.8 * size, .9 * size, .8 * size], [.45 * size, 2.4 * size, .1], g);
+  const trunk = mesh(GEO.cylinder, '#81735c', [.15 * size, 1.9 * size, .16 * size], [0, .95 * size, 0], g);
+  trunk.material = surfaceMaterial('bark', '#81735c');
+  for(let i=0;i<7;i++) {
+    const angle=i*2.4,height=1.1+i*.16,reach=.4+(i%3)*.2;
+    const branch=mesh(GEO.cylinder,'#81735c',[.045*size,.95*size,.045*size],[Math.cos(angle)*.29*size,height*size,Math.sin(angle)*.29*size],g);
+    branch.rotation.z=Math.cos(angle)*.7;branch.rotation.x=Math.sin(angle)*.7;branch.material=trunk.material;
+    const cluster=mesh(GEO.lowSphere,color,[(.48+i%2*.16)*size,.38*size,.47*size],[Math.cos(angle)*reach*size,(height+.4)*size,Math.sin(angle)*reach*size],g);
+    cluster.material=surfaceMaterial('leaf',color);
+  }
 }
 function flower(x, y, z, color, parent) {
   mesh(GEO.cylinder, '#6b9760', [.025, .35, .025], [x, y + .16, z], parent);
@@ -92,7 +101,7 @@ function batchStatic(group, exclusions = new Set()) {
   group.updateMatrixWorld(true);
   const inverse = group.matrixWorld.clone().invert(), batches = new Map(), removed = [];
   group.traverse(m => {
-    if (!m.isMesh || exclusions.has(m)) return;
+    if (!m.isMesh || m.isInstancedMesh || exclusions.has(m)) return;
     const geometry = m.geometry.clone();
     geometry.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inverse, m.matrixWorld));
     if (!batches.has(m.material)) batches.set(m.material, []);
@@ -107,14 +116,37 @@ function batchStatic(group, exclusions = new Set()) {
     const m = new THREE.Mesh(geometry, material); m.castShadow = true; m.receiveShadow = true; group.add(m);
   }
 }
+const mistPixels=new Uint8Array(64*64*4);
+for(let y=0;y<64;y++)for(let x=0;x<64;x++) {
+  const radius=Math.hypot((x-31.5)/31.5,(y-31.5)/31.5),i=(y*64+x)*4;
+  mistPixels.set([255,255,255,Math.round(Math.pow(Math.max(0,1-radius),2.3)*180)],i);
+}
+const mistTexture=new THREE.DataTexture(mistPixels,64,64);mistTexture.magFilter=THREE.LinearFilter;mistTexture.needsUpdate=true;
 function makeIsland(b, i, level, rng) {
   const group = new THREE.Group(); group.position.set(b.x, b.y, b.z); world.add(group);
-  box(level.earth, [b.w, 1.2, b.d], [0, -.7, 0], group);
-  box(level.grass, [b.w + .08, .3, b.d + .08], [0, -.15, 0], group);
-  const rock = mesh(GEO.cone, level.earth, [b.w * .59, 3.7 + rng() * 2, b.d * .59], [0, -3.2, 0], group);
-  rock.rotation.z = Math.PI; rock.rotation.y = .5;
-  // Light stone strata along exposed edges.
-  for (let k = 0; k < 3; k++) box('#e9d1a0', [.7 + rng() * 1.2, .12, .08], [(rng() - .5) * b.w * .7, -.5 - k * .23, b.d / 2 + .01], group);
+  const wall=box(level.earth, [b.w, 1.2, b.d], [0, -.7, 0], group);
+  wall.material=surfaceMaterial('rock',levelIndex===1?'#c6ac8f':'#a5aaa1');
+  const ground=box(level.grass, [b.w + .08, .3, b.d + .08], [0, -.15, 0], group);
+  ground.material=surfaceMaterial(levelIndex===1?'rock':'grass',levelIndex===1?'#c6ae88':levelIndex===2?'#768b82':'#83906a');
+  const rock = mesh(GEO.crag, level.earth, [b.w * .64, 5 + rng() * 2, b.d * .64], [0, -3.5, 0], group);
+  rock.material=wall.material;
+  // Broken rock fragments mask the mechanical straight side-wall silhouette.
+  for(let k=0;k<9;k++) {
+    const angle=k/9*Math.PI*2;
+    const fragment=mesh(GEO.lowSphere,level.earth,[.45+rng()*.5,.3+rng()*.45,.45+rng()*.5],[Math.cos(angle)*(b.w/2-.1),-.35,Math.sin(angle)*(b.d/2-.1)],group);
+    fragment.material=wall.material;
+  }
+  // Edge vegetation is instanced; it stays clear of the central landing area.
+  if(levelIndex!==1) {
+    const blade=new THREE.ConeGeometry(.045,.38,3);ownedGeometry.push(blade);
+    const grass=new THREE.InstancedMesh(blade,surfaceMaterial('grass','#74815b'),90);
+    const dummy=new THREE.Object3D();
+    for(let k=0;k<90;k++) {
+      dummy.position.set((rng()-.5)*(b.w-.5),.1,(rng()>.5?1:-1)*(b.d/2-.3-rng()*.65));
+      dummy.rotation.set((rng()-.5)*.4,rng()*6.28,(rng()-.5)*.45);dummy.scale.setScalar(.6+rng());dummy.updateMatrix();grass.setMatrixAt(k,dummy.matrix);
+    }
+    grass.castShadow=false;grass.receiveShadow=true;group.add(grass);
+  }
   if (i % 3 === 0 || i === 0) {
     tree(-b.w * .34, 0, -b.d * .29, i === 0 ? 1.55 : .9, levelIndex === 2 ? '#7399ae' : i % 2 ? '#94b96b' : '#689d70', group);
     if (b.w > 9) tree(b.w * .33, 0, b.d * .26, 1.05, levelIndex === 1 ? '#d1935e' : '#a9c872', group);
@@ -144,6 +176,7 @@ function disposeWorld() {
   if (!world) return;
   world.userData.dispose?.();
   ownedGeometry.forEach(g => g.dispose()); ownedGeometry = [];
+  decorative.forEach(a=>a.material?.dispose());
   scene.remove(world);
   // Geometry/material caches are shared across levels. Dispose only owned particle materials.
   particles.forEach(a => a.mesh.material.dispose()); particles = [];
@@ -151,9 +184,11 @@ function disposeWorld() {
 function loadLevel(index) {
   disposeWorld(); levelIndex = index;
   const l = LEVELS[index]; world = new THREE.Group(); scene.add(world);
-  scene.background = new THREE.Color(l.sky); scene.fog = new THREE.Fog(l.fog, 45, 150);
-  ambient.intensity = index === 2 ? 1.7 : 2.4; sun.intensity = index === 2 ? 1.7 : 3.4;
-  sun.color.set(index === 2 ? '#c8d5ff' : '#ffe5b2');
+  const air=atmosphere(renderer,index);scene.background=air.sky;scene.environment=air.environment;
+  scene.environmentIntensity=index===2?.45:.85;
+  scene.fog = new THREE.Fog(index===2?'#535f72':index===1?'#c4b29e':'#b8c9c3', 35, 135);
+  ambient.intensity = index === 2 ? .45 : .65; sun.intensity = index === 2 ? 1.1 : 3;
+  sun.color.set(index === 2 ? '#bfd0eb' : '#fff1da');
   const rng = random(701 + index);
   decorative = []; springs = []; collectibles = []; enemies = [];
   sceneTime = 0; gameTime = 0; coins = 0; shards = 0; health = 3; invincible = 0; checkpoint = false; lastPortalMessage = -10;
@@ -163,11 +198,9 @@ function loadLevel(index) {
   // Distant islands and clouds give depth without adding invisible collision surfaces.
   for (let i = 0; i < 22; i++) {
     const cloud = new THREE.Group(); cloud.position.set((rng() - .5) * 130, -5 - rng() * 15, 25 - rng() * 150);
-    for (let j = 0; j < 4; j++) {
-      const m = orb(index === 2 ? '#7d83a5' : '#f6f5df', [3 + rng() * 4, .9 + rng(), 2 + rng() * 3], [j * 3, rng(), rng()], cloud);
-      m.castShadow = false; m.receiveShadow = false;
-    }
-    world.add(cloud); batchStatic(cloud); cloud.traverse(m => { if (m.isMesh) { m.castShadow = false; m.receiveShadow = false; } }); decorative.push({ kind: 'cloud', mesh: cloud, phase: rng() * 6, base: cloud.position.x });
+    const mistMaterial=new THREE.SpriteMaterial({map:mistTexture,color:index===2?'#a2a8bb':'#e0e7df',transparent:true,opacity:.23,depthWrite:false});
+    const mist=new THREE.Sprite(mistMaterial);mist.scale.set(18+rng()*12,4+rng()*3,1);cloud.add(mist);world.add(cloud);
+    decorative.push({ kind: 'cloud', mesh: cloud, phase: rng() * 6, base: cloud.position.x, material:mistMaterial });
   }
   if (index === 2) {
     for (let i = 0; i < 85; i++) orb('#ffffd1', [.06, .06, .06], [(rng() - .5) * 170, 20 + rng() * 65, -20 - rng() * 125], world, { emissive: '#ffffcf', emissiveIntensity: 1 });
@@ -181,6 +214,9 @@ function loadLevel(index) {
       box('#f3dfb6', [.95, .22, .9], [s * (b.w / 2 - .6), 2.4, -b.d / 2 + .7], g);
     }
   });
+  islandMeshes.forEach(group=>group.traverse(m=>{
+    if(m.isMesh && !m.isInstancedMesh && m.material.color && ['e8d1a4','adabc3','f3dfb6'].includes(m.material.color.getHexString()))m.material=surfaceMaterial('rock','#c1b9a6');
+  }));
   const animated = new Set(decorative.filter(a => a.kind === 'water').map(a => a.mesh));
   islandMeshes.forEach(group => batchStatic(group, animated));
   coinPositions(l).forEach((pos, i) => {

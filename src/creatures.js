@@ -1,23 +1,20 @@
 import * as THREE from 'three';
+import { surfaceMaterial, organicSphere } from './realism.js';
 
 // Original elemental creatures. All assets are code-native geometry and shared
-// toon materials, so loading a different world never downloads another model.
+// physically based materials, so loading a different world never downloads another model.
 const shapes = {
-  round: new THREE.SphereGeometry(1, 16, 12),
-  leaf: new THREE.SphereGeometry(1, 12, 8),
+  round: organicSphere(),
+  leaf: new THREE.SphereGeometry(1, 24, 16),
   spike: new THREE.ConeGeometry(1, 1, 8),
   gem: new THREE.OctahedronGeometry(1),
+  whisker: new THREE.CylinderGeometry(.003, .001, .25, 4),
 };
-const palette = new Map();
-function material(color) {
-  if (!palette.has(color)) palette.set(color, new THREE.MeshToonMaterial({ color }));
-  return palette.get(color);
-}
-function part(parent, shape, color, pos, scale) {
-  const m = new THREE.Mesh(shapes[shape], material(color));
+function part(parent, shape, color, pos, scale, kind = 'skin') {
+  const m = new THREE.Mesh(shapes[shape], surfaceMaterial(shape === 'gem' ? 'mineral' : kind, color));
   m.position.set(...pos); m.scale.set(...scale); m.castShadow = m.receiveShadow = true; parent.add(m); return m;
 }
-const round = (parent, color, pos, scale) => part(parent, 'round', color, pos, scale);
+const round = (parent, color, pos, scale, kind) => part(parent, 'round', color, pos, scale, kind);
 function pivot(parent, position) {
   const g = new THREE.Group(); g.position.set(...position); parent.add(g); return g;
 }
@@ -25,40 +22,46 @@ function face(parent, y, z, spacing, iris) {
   const eyes = [];
   for (const side of [-1, 1]) {
     const g = pivot(parent, [side * spacing, y, z]);
-    round(g, '#fffbea', [0, 0, 0], [.13, .18, .065]);
-    round(g, iris, [0, -.015, .047], [.083, .127, .038]);
-    round(g, '#18283a', [0, -.01, .074], [.045, .092, .022]);
-    round(g, '#ffffff', [-.025, .055, .094], [.028, .04, .012]);
-    round(g, '#ffffff', [.025, -.05, .09], [.013, .018, .009]);
+    // Small wet animal eyes, darker sockets and actual environment reflections.
+    round(g, '#3e5145', [0, 0, -.02], [.14, .145, .065]);
+    round(g, '#c4bca2', [0, 0, .017], [.105, .115, .055], 'eye');
+    round(g, iris, [0, -.003, .055], [.083, .096, .04], 'eye');
+    round(g, '#121d1e', [0, -.004, .085], [.028, .077, .024], 'eye');
     eyes.push(g);
   }
   return eyes;
 }
 function leaf(parent, color, position, scale, tilt = 0) {
-  const m = part(parent, 'leaf', color, position, scale); m.rotation.z = tilt; return m;
+  const m = part(parent, 'leaf', color, position, scale, 'leaf'); m.rotation.z = tilt; return m;
 }
 export function createExplorer() {
   const g = new THREE.Group(); g.name = 'Niu · wind-leaf creature';
-  const body = round(g, '#50b9a9', [0, .68, -.015], [.43, .49, .34]);
-  round(g, '#fff0c5', [0, .68, .285], [.29, .34, .1]);
+  const body = round(g, '#6b9987', [0, .68, -.015], [.43, .49, .34]);
+  round(g, '#d4cfb1', [0, .68, .285], [.29, .34, .1]);
   const head = pivot(g, [0, 1.17, 0]);
-  round(head, '#70d7b9', [0, 0, 0], [.52, .43, .42]);
-  round(head, '#fff0c5', [0, -.15, .32], [.32, .19, .18]);
-  round(head, '#213c47', [0, -.07, .493], [.065, .045, .036]);
-  round(head, '#803c4c', [0, -.22, .482], [.07, .026, .018]);
+  round(head, '#83ac91', [0, 0, 0], [.47, .36, .44]);
+  round(head, '#d4cfb1', [0, -.15, .32], [.28, .15, .24]);
+  round(head, '#213c47', [0, -.07, .55], [.065, .045, .036]);
+  round(head, '#803c4c', [0, -.22, .54], [.07, .026, .018]);
   const eyes = face(head, .035, .365, .22, '#c08032');
   const ears = [];
   for (const s of [-1, 1]) {
     const ear = pivot(head, [s * .36, .27, -.06]); ear.rotation.z = -s * .38;
     leaf(ear, '#279b84', [0, .22, 0], [.16, .39, .1]);
     leaf(ear, '#d9ef83', [0, .24, .084], [.095, .25, .03]); ears.push(ear);
-    round(head, '#eea2a1', [s * .38, -.11, .28], [.1, .06, .045]);
+    round(head, '#638d77', [s * .34, -.1, .33], [.12, .07, .06]);
     const foot = round(g, '#277e78', [s * .24, .14, .1], [.19, .14, .26]);
     round(foot, '#ffedbb', [0, -.05, .68], [.65, .45, .35]);
     const arm = pivot(g, [s * .4, .8, 0]);
     round(arm, '#56c6a8', [s * .07, -.15, .035], [.13, .25, .14]);
     g.userData[s < 0 ? 'leftFoot' : 'rightFoot'] = foot;
     g.userData[s < 0 ? 'leftArm' : 'rightArm'] = arm;
+  }
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i++) {
+      const whisker = new THREE.Mesh(shapes.whisker, surfaceMaterial('eye', '#bbbda5'));
+      whisker.position.set(side * .32, -.12 - i * .035, .46); whisker.rotation.z = side * (1.1 + i * .12); head.add(whisker);
+    }
   }
   part(head, 'gem', '#f6c763', [0, .2, .383], [.08, .12, .045]);
   // A fan of leaves is the silhouette's signature, visible while running away.
@@ -76,9 +79,9 @@ export function createExplorer() {
 export function createGuardian(worldIndex) {
   const g = new THREE.Group();
   const colors = [
-    { body: '#7fc875', shell: '#317e63', belly: '#f7e7ac', iris: '#be733b' },
-    { body: '#f2ad61', shell: '#b75651', belly: '#ffe7b3', iris: '#743e61' },
-    { body: '#a397e0', shell: '#575a9a', belly: '#e4e2ff', iris: '#48bfc1' },
+    { body: '#879b65', shell: '#4c6752', belly: '#cfc6a4', iris: '#a36e36' },
+    { body: '#b9966b', shell: '#835d4e', belly: '#d6c9ac', iris: '#705445' },
+    { body: '#9492ac', shell: '#5e617a', belly: '#c7c5ca', iris: '#5c8c90' },
   ][worldIndex];
   const body = round(g, colors.body, [0, .48, 0], [.56, .43, .51]);
   round(g, colors.belly, [0, .39, .38], [.37, .25, .15]);
@@ -90,7 +93,7 @@ export function createGuardian(worldIndex) {
   const tail = pivot(g, [0, .42, -.43]);
   if (worldIndex === 0) {
     g.name = 'Brotort · seed-shell guardian';
-    round(g, colors.shell, [0, .6, -.2], [.53, .43, .43]);
+    round(g, colors.shell, [0, .6, -.2], [.53, .43, .43], 'bark');
     for (let i = 0; i < 5; i++) {
       const a = i * Math.PI * 2 / 5;
       const l = leaf(g, '#9ddb69', [Math.sin(a) * .23, .94, -.2 + Math.cos(a) * .23], [.14, .1, .31]);
@@ -101,7 +104,7 @@ export function createGuardian(worldIndex) {
     leaf(tail, '#9ddb69', [0, .04, -.2], [.1, .09, .26]);
   } else if (worldIndex === 1) {
     g.name = 'Brasec · sunstone guardian';
-    round(g, colors.shell, [0, .62, -.18], [.53, .43, .43]);
+    round(g, colors.shell, [0, .62, -.18], [.53, .43, .43], 'rock');
     for (let i = 0; i < 5; i++) {
       const angle = (i - 2) * .5;
       const spike = part(g, 'gem', i % 2 ? '#ffc66f' : '#ed8053', [Math.sin(angle) * .39, .91 + Math.cos(angle) * .12, -.23], [.13, .25, .13]); spike.rotation.z = -angle;

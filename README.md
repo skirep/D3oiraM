@@ -60,7 +60,7 @@ Simulation runs at 120 Hz with capped catch-up; rendering follows the display. S
 
 ## Scope and verification
 
-This is a compact, complete **three-level indie game**, inspired by the exploration and jumping of classic 3D platformers. All characters, world geometry and sounds are procedural and original. It does not contain Nintendo characters, names, assets or music.
+This is a compact, complete **three-level indie game**, inspired by the exploration and jumping of classic 3D platformers. Characters, world geometry and sounds are procedural and original; terrain also uses an original AI-generated natural rock texture. It does not contain Nintendo characters, names, assets or music.
 
 Automated physics and build checks pass. Visual/browser gameplay QA remains pending because the development environment blocked its local browser preview. Real-device performance, touch handling and WebGL appearance should be checked after deployment.
 
@@ -70,7 +70,7 @@ Original source and procedural artwork: MIT. Three.js and Vite retain their resp
 
 ## Creature designs
 
-The character art uses original pocket-monster-inspired silhouettes and toon shading:
+The character art uses original pocket-monster-inspired silhouettes with physically based skin, leaf and mineral materials:
 
 - **Niu:** mint wind-and-leaf explorer, cream muzzle, leaf ears and animated leaf-fan tail.
 - **Brotort:** green seed-shell garden guardian with a sprouting flower.
@@ -78,3 +78,13 @@ The character art uses original pocket-monster-inspired silhouettes and toon sha
 - **Llunalat:** lavender moonwing guardian with animated wings and a golden forehead gem.
 
 All have eye highlights, blinking and secondary animation. The three guardian species retain the same stomp/contact rules and collision bounds.
+
+## Naturalistic rendering update
+
+The renderer now uses environment reflections, physically based skin/leaf/stone materials, a natural rock-and-moss albedo with matching derived normal and roughness maps, and procedural micro-scale skin and leaf veins. Rounded organic volumes replace coarse creature facets; smaller glossy eyes, dark sockets and fine whiskers replace painted eye highlights. Islands have eroded rock undersides, rock fragments, instanced edge grass, branched trees and transparent drifting mist. Desktop shadows use a 2048 map; mobile keeps 1024.
+
+This moves the live game toward a naturalistic, realistic look. These remain procedural creature models, not scanned animals or film-quality sculpted assets; full photorealism is not established by the build checks. Browser visual validation is still blocked by the test browser's missing WebGL 2 support.
+
+The generated material is stored at `public/textures/moss-limestone.webp` with its derived normal and roughness maps. It was created with the built-in image generator using this prompt:
+
+> A tileable, flat orthographic macro photograph of weathered pale grey limestone with irregular dark forest-green moss, fine cracks, mineral grains, pores and dry lichen; neutral diffuse illumination, no perspective, cast shadows, text or objects. Dense natural material detail, seamless edges for repeating over 3D rock surfaces.
